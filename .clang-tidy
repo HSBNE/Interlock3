@@ -1,0 +1,3 @@
+---
+Checks: "*"
+FormatStyle: .clang-format

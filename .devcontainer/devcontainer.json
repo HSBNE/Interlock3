@@ -1,0 +1,35 @@
+{
+  "name": "ESP8266 RTOS SDK Dev Container",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "args": {
+      "USER_ID": "${localEnv:UID}",
+      "GROUP_ID": "${localEnv:HOST_GID}"
+    }
+  },
+  "runArgs": [
+    "--privileged"
+  ],
+  "mounts": [
+    "source=/dev,target=/dev,type=bind",
+    "source=${env:HOME}/.gitconfig,target=/home/espdev/.gitconfig,type=bind",
+    "source=${env:HOME}/.ssh,target=/home/espdev/.ssh,type=bind"
+  ],
+  "remoteUser": "espdev",
+  "features": {},
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.profiles.linux": {
+          "bash": {
+            "path": "/bin/bash",
+            "args": [
+              "-l"
+            ]
+          }
+        },
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  }
+}
