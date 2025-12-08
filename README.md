@@ -31,6 +31,26 @@ To flash the firmware first build the project and then
 idf.py -p (PORT) flash
 ```
 
+## Github Actions
+
+Github actions are used to create releases.
+
+### The Container
+
+Actions run in the same container as the dev container. The container is hosted on the Github Container registry. Please keep the container up to date.
+
+To update the container:
+
+In `./devcontainer`
+```
+docker build -t ghcr.io/hsbne/interlock3/esp8266-dev:<version> .
+docker login ghcr.io -u <your-github-username>
+docker push ghcr.io/hsbne/interlock3/esp8266-dev:<version>
+```
+
+Login using a token with the `write:packages` scope.
+
+
 ## Attributions
 
 The Interlock3 project is made to be compatible with the [MemberMatters](https://github.com/membermatters/MemberMatters) membership portals made, kindly, by Jaimyn Mayer. This project is based in part on the [BeepBeep](https://github.com/membermatters/BeepBeep) firmware by the same author. 

@@ -1,0 +1,35 @@
+name: On Push
+
+on: 
+  push:
+    branches:
+      - '**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/hsbne/interlock3/esp8266-dev:0.0.1
+      options: --user root
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        
+      - name: Setup Build
+        shell: bash
+        run: |
+          set -e
+          cp -r $GITHUB_WORKSPACE /home/espdev/workspace
+          git config --global --add safe.directory /home/espdev/workspace
+          git config --global --add safe.directory /home/espdev/esp/ESP8266_RTOS_SDK
+          /home/espdev/esp/ESP8266_RTOS_SDK/install.sh
+
+      - name: Build Project
+        shell: bash
+        run: |
+          set -e
+          export IDF_PATH=/home/espdev/esp/ESP8266_RTOS_SDK
+          source $IDF_PATH/export.sh
+          cd /home/espdev/workspace
+          idf.py build
+
