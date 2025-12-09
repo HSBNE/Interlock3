@@ -1,0 +1,1 @@
+esptool.py -p /dev/ttyUSB0 -b 460800 --no-stub --after hard_reset write_flash --flash_mode dio --flash_size 2MB --flash_freq 40m 0x0 build/bootloader/bootloader.bin 0x8000 build/partition_table/partition-table.bin 0xf000 build/ota_data_initial.bin 0x12000 build/spiffs.bin 0x32000 build/Interlock3.bin

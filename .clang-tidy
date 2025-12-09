@@ -1,3 +1,6 @@
 ---
-Checks: "*"
+Checks: "*
+    -readability-function-cognitive-complexity,
+    -altera
+"
 FormatStyle: .clang-format

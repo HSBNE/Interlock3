@@ -2,6 +2,12 @@
 
 The Interlock3 project is the third iteration of of the ESP8266 firmware for HSBNE's access control system. 
 
+## Configuration
+
+Each interlock requires a configuration file, which can be uploaded to the device when it is flashed.
+
+For details on configuration please see [CONFIG.md](./CONFIG.md).
+
 ## Development
 
 ### Dev Containers
@@ -10,6 +16,9 @@ This project uses VS Code dev containers. The dev container is set up to run onl
  * The container mounts your ~/.ssh and ~/.gitconfig directories to make git easier to use.
 
 For best results run `export HOST_GID=$(id -g)` before building the container. The container user will automatically use a GID of 1000 if this is not done.
+
+
+
 
 ### Building
 
@@ -26,9 +35,19 @@ rm -rf build && idf.py build
 
 ### Flashing 
 
-To flash the firmware first build the project and then 
+To flash the firmware first build the project.
 ```
 idf.py -p (PORT) flash
+```
+
+If you would like to overwrite the existing configuration on the device ([see the configuration section](#configuration)) then use the following command.
+```
+esptool.py -p /dev/ttyUSB0 -b 460800 --no-stub --after hard_reset write_flash --flash_mode dio --flash_size 2MB --flash_freq 40m 0x0 build/bootloader/bootloader.bin 0x8000 build/partition_table/partition-table.bin 0xf000 build/ota_data_initial.bin 0x12000 build/spiffs.bin 0x32000 build/Interlock3.bin
+```
+
+If you would like to keep the existing configuration then use:
+```
+esptool.py -p /dev/ttyUSB0 -b 460800 --no-stub --after hard_reset write_flash --flash_mode dio --flash_size 2MB --flash_freq 40m 0x0 build/bootloader/bootloader.bin 0x8000 build/partition_table/partition-table.bin 0xf000 build/ota_data_initial.bin 0x32000 build/Interlock3.bin
 ```
 
 ## Github Actions
