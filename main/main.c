@@ -1,38 +1,48 @@
-/* Hello World Example
-
-   This example code is in the Public Domain (or CC0 licensed, at your option.)
-
-   Unless required by applicable law or agreed to in writing, this
-   software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
-   CONDITIONS OF ANY KIND, either express or implied.
-*/
 #include <stdio.h>
+#include <string.h>
+#include "config.h"
+#include "core.h"
+#include "esp_err.h"
+#include "esp_log.h"
+#include "esp_spi_flash.h"
+#include "esp_system.h"
+#include "file_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "esp_system.h"
-#include "esp_spi_flash.h"
 
+#include "esp_spiffs.h"
+#include "lib/littlefs/lfs.h"
+#include "projdefs.h"
 
-void app_main()
-{
-    printf("Hello world!\n");
+#define TAG "interlock"
 
-    /* Print chip information */
-    esp_chip_info_t chip_info;
-    esp_chip_info(&chip_info);
-    printf("This is ESP8266 chip with %d CPU cores, WiFi, ",
-            chip_info.cores);
-
-    printf("silicon revision %d, ", chip_info.revision);
-
-    printf("%dMB %s flash\n", spi_flash_get_chip_size() / (1024 * 1024),
-            (chip_info.features & CHIP_FEATURE_EMB_FLASH) ? "embedded" : "external");
-
-    for (int i = 10; i >= 0; i--) {
-        printf("Restarting in %d seconds...\n", i);
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
+void app_main(void) {
+    for (int i = 0; i < 5; i++) {
+        ESP_LOGE(TAG, "Waiting (%d s)", i);
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
-    printf("Restarting now.\n");
-    fflush(stdout);
-    esp_restart();
+
+    const char* fs_status = "";
+    const bool file_system_ok = fs_init(&fs_status);
+    ESP_LOGE(TAG, "File system status: %s", fs_status);
+
+    while (1) {
+        vTaskDelay(pdMS_TO_TICKS(3000));
+
+        if (!file_system_ok) {
+            ESP_LOGE(TAG, "File system status: %s", fs_status);
+            continue;
+        }
+
+        for (int i = 0; i < CFG_KEY_N_KEYS; i++) {
+            char buf[256] = {0};
+            strcpy(buf, "didn't work :(");
+            config_err_t err = config_value_get(i, buf, sizeof(buf));
+            if (CONFIG_OK != err) {
+                ESP_LOGE(TAG, "Error getting key %d: %s", i, config_err_to_str(err));
+            } else {
+                ESP_LOGI(TAG, "Value of key %d: %s", i, buf);
+            }
+        }
+    }
 }
