@@ -12,6 +12,7 @@
 
 #include "esp_spiffs.h"
 #include "lib/littlefs/lfs.h"
+#include "network.h"
 #include "projdefs.h"
 
 #define TAG "interlock"
@@ -25,6 +26,8 @@ void app_main(void) {
     const char* fs_status = "";
     const bool file_system_ok = fs_init(&fs_status);
     ESP_LOGE(TAG, "File system status: %s", fs_status);
+
+    network_start("ssid", "pass");
 
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(3000));

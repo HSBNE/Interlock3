@@ -5,6 +5,7 @@ idf_component_register(
         "config.c"
         "core.c"
         "file_system.c"
+        "network.c"
 
         #LittleFS
         "lib/littlefs/lfs.c"
