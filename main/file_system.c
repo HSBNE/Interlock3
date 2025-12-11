@@ -117,7 +117,7 @@ bool fs_init(const char** out_status) {
     }
 
     if (NULL != out_status) {
-        *out_status = "OK";
+        *out_status = "Filesystem OK";
     }
     filesystem_mounted = true;
     return true;

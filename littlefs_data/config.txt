@@ -1,13 +1,71 @@
-# Interlock Config
+####################
+# Interlock Config #
+####################
 
+# Lines starting with # or ; are ignored.
+# LF or CRLF line endings are allowed.
+
+#
+# Config version
+# 
 CONFIG_VERSION=CONFIG_VERSION
-DEVICE_NAME=DEVICE_NAME
-DEVICE_TYPE=DEVICE_TYPE
-PORTAL_ADDRESS=PORTAL_ADDRESS
-API_KEY=API_KEY
-LED_COUNT=LED_COUNT
-LED_TYPE=LED_TYPE
-RFID_READER_TYPE=RFID_READER_TYPE
-WIFI_SSID=WIFI_SSID
-WIFI_PSK=WIFI_PSK
-SKELETON_CARD=SKELETON_CARD
+
+#
+# Device config
+#
+
+; The name used for registration with the portal
+DEVICE_NAME=TestInterlock
+
+; The type of the device
+; Allowed: DOOR|INTERLOCK
+DEVICE_TYPE=DOOR
+
+#
+# Portal config
+#
+
+; Address used to connect to the portal. No trailing slash.
+; e.g. portal.hsbne.org
+PORTAL_ADDRESS=www.howmyssl/com/a/check
+
+; Port used for websocket communications with the portal
+PORTAL_PORT=443
+
+; Secret API key for the portal's access API
+PORTAL_API_KEY=123456789abcdefg
+
+#
+# LED config
+#
+
+; Number of LEDs on the device
+LED_COUNT=20
+
+; Type of LED lights. Newer interlocks typically use BGRW
+; Allowed: RGBW|BGRW
+LED_TYPE=BGRW
+
+#
+# RFID config
+#
+
+; The type of RFID reader. Almost all interlocks use the RF125PS reader.
+; Some very old interlocks use the legacy reader.
+; Allowed: RF125PS|LEGACY
+RFID_READER_TYPE=RF125PS
+
+; The number of an RFID card that can always unlock the interlock.
+; e.g. 714456
+; Set to NONE to disable this feature
+RFID_SKELETON_CARD=NONE
+
+#
+# Wifi config
+#
+
+; WiFi name
+WIFI_SSID=FBIVan
+
+; WiFi password
+WIFI_PSK=password

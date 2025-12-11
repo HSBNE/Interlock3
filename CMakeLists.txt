@@ -13,12 +13,7 @@ add_compile_options(-Wall -Werror -Wpedantic -Werror=vla -DconfigSUPPORT_STATIC_
 set(MKLITTLEFS_BIN ${CMAKE_CURRENT_SOURCE_DIR}/tools/mklittlefs)
 set(LFS_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/littlefs_data)
 set(LFS_OUTPUT_BIN ${CMAKE_CURRENT_BINARY_DIR}/littlefs.bin)
-add_custom_command(
-    OUTPUT ${LFS_OUTPUT_BIN}
-    COMMAND ${MKLITTLEFS_BIN} -s 0x20000 -b 4096 -p 256 -c ${LFS_SOURCE_DIR} ${LFS_OUTPUT_BIN}
-    COMMENT "Building LittleFS image"
-    VERBATIM
-)
 add_custom_target(build_littlefs ALL
-    DEPENDS ${LFS_OUTPUT_BIN}
+    COMMAND ${MKLITTLEFS_BIN} -s 0x20000 -b 4096 -p 256 -c ${LFS_SOURCE_DIR} ${LFS_OUTPUT_BIN}
+    VERBATIM
 )

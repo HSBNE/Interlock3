@@ -17,35 +17,36 @@
 
 #define TAG "interlock"
 
+void trap(const char* reason) {
+    while (1) {
+        ESP_LOGE(TAG, "Trapped. %s", reason);
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+}
+
 void app_main(void) {
-    for (int i = 0; i < 5; i++) {
+    // Delay a bit at startup so I can attach my crappy programmer
+    for (int i = 0; i < 3; i++) {
         ESP_LOGE(TAG, "Waiting (%d s)", i);
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 
+    // Start the file system
     const char* fs_status = "";
-    const bool file_system_ok = fs_init(&fs_status);
-    ESP_LOGE(TAG, "File system status: %s", fs_status);
+    if (!fs_init(&fs_status)) {
+        trap(fs_status);
+    }
 
-    network_start("ssid", "pass");
+    // Init the config
+    if (!config_init()) {
+        trap("Config not OK");
+    }
+
+    // Start the network
+    network_start(config_get_wifi_ssid(), config_get_wifi_psk());
 
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(3000));
-
-        if (!file_system_ok) {
-            ESP_LOGE(TAG, "File system status: %s", fs_status);
-            continue;
-        }
-
-        for (int i = 0; i < CFG_KEY_N_KEYS; i++) {
-            char buf[256] = {0};
-            strcpy(buf, "didn't work :(");
-            config_err_t err = config_value_get(i, buf, sizeof(buf));
-            if (CONFIG_OK != err) {
-                ESP_LOGE(TAG, "Error getting key %d: %s", i, config_err_to_str(err));
-            } else {
-                ESP_LOGI(TAG, "Value of key %d: %s", i, buf);
-            }
-        }
+        ESP_LOGI(TAG, "OK");
     }
 }

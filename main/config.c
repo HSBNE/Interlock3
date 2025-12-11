@@ -1,5 +1,7 @@
 #include "config.h"
+#include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include "core.h"
@@ -54,6 +56,11 @@ const char* config_err_to_str(config_err_t err) {
             return "CONFIG_ERR_FILE_SYSTEM";
         case CONFIG_ERR_TRUNCATED:
             return "CONFIG_ERR_TRUNCATED";
+        case CONFIG_ERR_INVALID_VALUE:
+            return "CONFIG_ERR_INVALID_VALUE";
+        case CONFIG_ERR_N_ERRS:
+            // Intentional fall through
+            (void)0;
     }
     return "INVALID";
 }
@@ -63,15 +70,16 @@ const char* config_err_to_str(config_err_t err) {
 // =============================================================================
 
 static const char* config_key_strings[CFG_KEY_N_KEYS] = {
-    [CFG_KEY_API_KEY] = "API_KEY",
     [CFG_KEY_CONFIG_VERSION] = "CONFIG_VERSION",
     [CFG_KEY_DEVICE_NAME] = "DEVICE_NAME",
     [CFG_KEY_DEVICE_TYPE] = "DEVICE_TYPE",
     [CFG_KEY_LED_COUNT] = "LED_COUNT",
     [CFG_KEY_LED_TYPE] = "LED_TYPE",
     [CFG_KEY_PORTAL_ADDRESS] = "PORTAL_ADDRESS",
+    [CFG_KEY_PORTAL_API_KEY] = "PORTAL_API_KEY",
+    [CFG_KEY_PORTAL_PORT] = "PORTAL_PORT",
     [CFG_KEY_RFID_READER_TYPE] = "RFID_READER_TYPE",
-    [CFG_KEY_SKELETON_CARD] = "SKELETON_CARD",
+    [CFG_KEY_RFID_SKELETON_CARD] = "RFID_SKELETON_CARD",
     [CFG_KEY_WIFI_PSK] = "WIFI_PSK",
     [CFG_KEY_WIFI_SSID] = "WIFI_SSID",
 };
@@ -90,11 +98,12 @@ static const char* config_key_strings[CFG_KEY_N_KEYS] = {
 // valid if the function returns CONFIG_OK.
 //
 // On success, up to `size` bytes will be copied to `out_value`, which will
-// be null terminated for any `size` greater than zero.
+// be null terminated for any `size` greater than zero. Size is recommended to
+// be at least CONFIG_MAX_VALUE_LENGTH + 1.
 //
 // On failure, a relevant error code will be returned. The value in `out_value`
 // must be ignored.
-config_err_t config_value_get(config_key_t key, char* out_value, size_t size) {
+static config_err_t config_value_get(config_key_t key, char* out_value, size_t size) {
     // Validate the key
     if (0 > key || key >= CFG_KEY_N_KEYS) {
         return CONFIG_ERR_INVALID_ARG;
@@ -174,4 +183,242 @@ config_err_t config_value_get(config_key_t key, char* out_value, size_t size) {
     fs_unlock(fs);
 
     return ret_val;
+}
+
+// =============================================================================
+// Config
+// =============================================================================
+
+typedef struct interlock_config {
+    // Device
+    device_type_t device_type;
+    char device_name[CONFIG_MAX_VALUE_LENGTH + 1];
+
+    // Portal
+    char portal_address[CONFIG_MAX_VALUE_LENGTH + 1];
+    char portal_api_key[CONFIG_MAX_VALUE_LENGTH + 1];
+    uint16_t portal_port;
+
+    // WIFI
+    char wifi_ssid[CONFIG_MAX_VALUE_LENGTH + 1];
+    char wifi_psk[CONFIG_MAX_VALUE_LENGTH + 1];
+
+    // LED
+    uint16_t led_count;
+    led_type_t led_type;
+
+    // RFID
+    rfid_reader_type_t rfid_reader_type;
+    bool rfid_use_skeleton_card;
+    rfid_number_t skeleton_card;
+} interlock_config_t;
+
+static bool config_str_to_device_type(const char* str, device_type_t* type) {
+    if (0 == strcmp_icase(str, "DOOR")) {
+        *type = DEVICE_TYPE_DOOR;
+        return true;
+    }
+
+    if (0 == strcmp_icase(str, "INTERLOCK")) {
+        *type = DEVICE_TYPE_INTERLOCK;
+        return true;
+    }
+
+    return false;
+}
+
+static bool config_str_to_led_type(const char* str, led_type_t* type) {
+    if (0 == strcmp_icase(str, "RGBW")) {
+        *type = LED_TYPE_RGBW;
+        return true;
+    }
+
+    if (0 == strcmp_icase(str, "BGRW")) {
+        *type = LED_TYPE_BGRW;
+        return true;
+    }
+
+    return false;
+}
+
+static bool config_str_to_rfid_reader_type(const char* str, rfid_reader_type_t* type) {
+    if (0 == strcmp_icase(str, "RF125PS")) {
+        *type = RFID_READER_TYPE_RF125PS;
+        return true;
+    }
+
+    if (0 == strcmp_icase(str, "LEGACY")) {
+        *type = RFID_READER_TYPE_LEGACY;
+        return true;
+    }
+
+    return false;
+}
+
+static bool config_str_to_u16(const char* str, uint16_t* val) {
+    long l;
+    if (!strtol_easy(str, &l)) {
+        return false;
+    }
+
+    if (l < 0 || l > UINT16_MAX) {
+        return false;
+    }
+
+    *val = (uint16_t)l;
+    return true;
+}
+
+static void config_read_From_file_log_error(config_key_t key, config_err_t err) {
+    ESP_LOGE(TAG, "Error reading config value for %s: %s", config_key_strings[key], config_err_to_str(err));
+}
+
+static void config_read_from_file_helper(config_key_t key, char* buffer, size_t buffer_size, uint32_t* status) {
+    config_err_t err = config_value_get(key, buffer, buffer_size);
+    if (CONFIG_OK != err) {
+        config_read_From_file_log_error(key, err);
+        *status |= (1 << err);
+    }
+}
+
+// Returns true if the config was successfully read.
+static bool config_read_from_file(interlock_config_t* config) {
+    uint32_t status = 0;                             // Bit field of errors
+    char buffer[CONFIG_MAX_VALUE_LENGTH + 1] = {0};  // Working buffer non string config items
+
+    memset(config, 0, sizeof(interlock_config_t));
+
+    // Device type
+    config_read_from_file_helper(CFG_KEY_DEVICE_TYPE, buffer, sizeof(buffer), &status);
+    if (!config_str_to_device_type(buffer, &config->device_type)) {
+        status |= CONFIG_ERR_INVALID_ARG;
+    }
+
+    // Device name
+    config_read_from_file_helper(CFG_KEY_DEVICE_NAME, config->device_name, sizeof(config->device_name), &status);
+
+    // Portal address
+    config_read_from_file_helper(CFG_KEY_PORTAL_ADDRESS, config->portal_address, sizeof(config->portal_address),
+                                 &status);
+
+    // Portal API key
+    config_read_from_file_helper(CFG_KEY_PORTAL_API_KEY, config->portal_api_key, sizeof(config->portal_api_key),
+                                 &status);
+
+    // Portal port
+    config_read_from_file_helper(CFG_KEY_PORTAL_PORT, buffer, sizeof(buffer), &status);
+    if (!config_str_to_u16(buffer, &config->portal_port)) {
+        status |= CONFIG_ERR_INVALID_ARG;
+    }
+
+    // Wifi SSID
+    config_read_from_file_helper(CFG_KEY_WIFI_SSID, config->wifi_ssid, sizeof(config->wifi_ssid), &status);
+
+    // Wifi PSK
+    config_read_from_file_helper(CFG_KEY_WIFI_PSK, config->wifi_psk, sizeof(config->wifi_psk), &status);
+
+    // LED count
+    config_read_from_file_helper(CFG_KEY_LED_COUNT, buffer, sizeof(buffer), &status);
+    if (!config_str_to_u16(buffer, &config->led_count)) {
+        config_read_From_file_log_error(CFG_KEY_LED_COUNT, CONFIG_ERR_INVALID_ARG);
+        status |= CONFIG_ERR_INVALID_ARG;
+    }
+
+    // LED Type
+    config_read_from_file_helper(CFG_KEY_LED_TYPE, buffer, sizeof(buffer), &status);
+    if (!config_str_to_led_type(buffer, &config->led_type)) {
+        config_read_From_file_log_error(CFG_KEY_LED_TYPE, CONFIG_ERR_INVALID_ARG);
+        status |= CONFIG_ERR_INVALID_ARG;
+    }
+
+    // RFID reader type
+    config_read_from_file_helper(CFG_KEY_RFID_READER_TYPE, buffer, sizeof(buffer), &status);
+    if (!config_str_to_rfid_reader_type(buffer, &config->rfid_reader_type)) {
+        config_read_From_file_log_error(CFG_KEY_RFID_READER_TYPE, CONFIG_ERR_INVALID_ARG);
+        status |= CONFIG_ERR_INVALID_ARG;
+    }
+
+    // RFID skeleton card
+    long skeleton_card;
+    config_read_from_file_helper(CFG_KEY_RFID_SKELETON_CARD, buffer, sizeof(buffer), &status);
+    if (0 == strcmp_icase(buffer, "NONE")) {
+        config->rfid_use_skeleton_card = false;
+        config->skeleton_card = UINT64_MAX;
+    } else if (strtol_easy(buffer, &skeleton_card) && skeleton_card > 0) {
+        config->rfid_use_skeleton_card = true;
+        config->skeleton_card = skeleton_card;
+    } else {
+        config_read_From_file_log_error(CFG_KEY_RFID_SKELETON_CARD, CONFIG_ERR_INVALID_ARG);
+        status |= CONFIG_ERR_INVALID_ARG;
+    }
+
+    // Print out any config errors:
+    if (0 != status) {
+        ESP_LOGE(TAG, "The following errors were encountered when reading the config file:");
+        for (int i = 0; i < CONFIG_ERR_N_ERRS; i++) {
+            if ((status & (1 << i)) && i != CONFIG_OK) {
+                ESP_LOGE(TAG, "  - %s", config_err_to_str(i));
+            }
+        }
+    }
+
+    return 0 == status;
+}
+
+static interlock_config_t config = {0};
+
+bool config_init() {
+    return config_read_from_file(&config);
+}
+
+// =============================================================================
+// Getters
+// =============================================================================
+
+device_type_t config_get_device_type(void) {
+    return config.device_type;
+}
+
+const char* config_get_device_name(void) {
+    return config.device_name;
+}
+
+const char* config_get_portal_address(void) {
+    return config.portal_address;
+}
+
+const char* config_get_portal_api_key(void) {
+    return config.portal_api_key;
+}
+
+uint16_t config_get_portal_port(void) {
+    return config.portal_port;
+}
+
+const char* config_get_wifi_ssid(void) {
+    return config.wifi_ssid;
+}
+
+const char* config_get_wifi_psk(void) {
+    return config.wifi_psk;
+}
+
+uint16_t config_get_led_count(void) {
+    return config.led_count;
+}
+
+led_type_t config_get_led_type(void) {
+    return config.led_type;
+}
+
+rfid_reader_type_t config_get_rfid_reader_type(void) {
+    return config.rfid_reader_type;
+}
+
+bool config_get_rfid_use_skeleton_card(void) {
+    return config.rfid_use_skeleton_card;
+}
+
+rfid_number_t config_get_skeleton_card(void) {
+    return config.skeleton_card;
 }
